@@ -1,8 +1,8 @@
-GCC=gcc
+GCC=g++
 CFLAGS=
 
 BIN=server client
-SRCS=server.c client.c
+SRCS=server.cpp client.cpp
 
 all: $(BIN)
 
