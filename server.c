@@ -2,11 +2,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
+#include <arpa/inet.h>
 
-#define IP_ADDR "10.0.0.1"
-#define PORT 8000
+#define PORT 8080
 #define BACKLOG 10
 
 int main() {
@@ -15,7 +13,7 @@ int main() {
     struct sockaddr_in their_addr;
     int sin_size;
 
-    sockfd = socket(PF_INET, SOCK_STREAM, 0);
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
     my_addr.sin_family = AF_INET;
     my_addr.sin_port = htons(PORT);

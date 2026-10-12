@@ -1,3 +1,2 @@
 .vscode/
-temp.c
-tempc.c
+temp*

@@ -2,11 +2,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
+#include <arpa/inet.h>
 
-#define IP_ADDR "10.0.0.1"
-#define PORT 8000
+#define PORT 8080
 #define BACKLOG 10
 
 int main() {
@@ -17,6 +15,8 @@ int main() {
 
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(PORT);
+
+    inet_pton(AF_INET, "<server_ip_address>", &server_addr.sin_addr);
 
     status = connect(clientfd, (struct sockaddr*) &server_addr, sizeof(server_addr));
 
