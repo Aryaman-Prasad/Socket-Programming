@@ -40,6 +40,44 @@ void fullFillAdj(std::vector<std::vector<int>> &adj, int N) {
     }
 }
 
+std::pair<uint16_t,std::string> parse_ip_port(uint64_t connect_msgs){
+
+    uint16_t port_no=(((0xFFFF)) & (uint64_t)connect_msgs);
+    std::string s="";
+    connect_msgs>>=16;
+    s=std::to_string(connect_msgs & 0xFF)+s;
+    s="."+s;
+    connect_msgs>>=8;
+    s=std::to_string(connect_msgs & 0xFF)+s;
+    s="."+s;
+    connect_msgs>>=8;
+    s=std::to_string(connect_msgs & 0xFF)+s;
+    s="."+s;
+    connect_msgs>>=8;
+    s=std::to_string(connect_msgs & 0xFF)+s;
+    std::string ipvn=s;
+
+    return {port_no,ipvn};
+
+}
+
+std::string linkstate(std::string ip,uint16_t port,int w,int j){
+
+    std::string s = "";
+    s+="(";
+    s+=(char)('A'+j);
+    s+=",";
+    s+=(ip);
+    s+=",";
+    s+=std::to_string(port);
+    s+=",";
+    s+=std::to_string(w);
+    s+=")";            
+    s+="\n";
+
+    return s;
+}
+
 int main(int argc, char *argv[]) {
     if (argc < 2) {
         std::cout << "Usage: " << argv[0] << " <config-file>.txt\n";
@@ -114,40 +152,17 @@ int main(int argc, char *argv[]) {
 
         ssize_t valread;
         valread = read(client_sockfd[i], &connect_msgs[i], sizeof(connect_msgs));
-        port_no[i]=(((0xFFFF)) & (uint64_t)connect_msgs[i]);
-        std::string s="";
-        connect_msgs[i]>>=16;
-        s=std::to_string(connect_msgs[i] & 0xFF)+s;
-        s="."+s;
-        connect_msgs[i]>>=8;
-        s=std::to_string(connect_msgs[i] & 0xFF)+s;
-        s="."+s;
-        connect_msgs[i]>>=8;
-        s=std::to_string(connect_msgs[i] & 0xFF)+s;
-        s="."+s;
-        connect_msgs[i]>>=8;
-        s=std::to_string(connect_msgs[i] & 0xFF)+s;
-        ipvn[i]=s;
-
+        auto p = parse_ip_port(connect_msgs[i]);
+        port_no[i] = p.first;
+        ipvn[i] = p.second;
         std::cout << "Client " << (char) ('A' + i) << ": " <<ipvn[i]<<" "<<port_no[i]<< "\n";
-
-        s="";
-        
     }
 
     for(int i=0;i<N;i++){
         std::string s = "";
         for(int j=0;j<N;j++){
-            s+="(";
-            s+=(char)('A'+j);
-            s+=",";
-            s+=(ipvn[j]);
-            s+=",";
-            s+=std::to_string(port_no[j]);
-            s+=",";
-            s+=std::to_string(adj[i][j]);
-            s+=")";            
-            s+="\n";
+            if(adj[i][j]<0) continue;
+            s = linkstate(ipvn[j],port_no[j],adj[i][j],j);
         }
         send(client_sockfd[i],s.c_str(),s.size(),0);
     }
