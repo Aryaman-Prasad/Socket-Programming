@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <vector>
+#include <cstring>
 #include <arpa/inet.h>
 
 #define PORT 5000
@@ -40,42 +41,26 @@ void fullFillAdj(std::vector<std::vector<int>> &adj, int N) {
     }
 }
 
-std::pair<uint16_t,std::string> parse_ip_port(uint64_t connect_msgs){
+std::pair<uint16_t,uint32_t> parse_ip_port(uint64_t connect_msgs){
 
     uint16_t port_no=(((0xFFFF)) & (uint64_t)connect_msgs);
-    std::string s="";
     connect_msgs>>=16;
-    s=std::to_string(connect_msgs & 0xFF)+s;
-    s="."+s;
-    connect_msgs>>=8;
-    s=std::to_string(connect_msgs & 0xFF)+s;
-    s="."+s;
-    connect_msgs>>=8;
-    s=std::to_string(connect_msgs & 0xFF)+s;
-    s="."+s;
-    connect_msgs>>=8;
-    s=std::to_string(connect_msgs & 0xFF)+s;
-    std::string ipvn=s;
-
-    return {port_no,ipvn};
+    return {port_no,(uint32_t)connect_msgs};
 
 }
 
-std::string linkstate(std::string ip,uint16_t port,int w,int j){
+void linkstate(char* buf,uint32_t ip,uint16_t port,uint32_t w,uint8_t j){
 
-    std::string s = "";
-    s+="(";
-    s+=(char)('A'+j);
-    s+=",";
-    s+=(ip);
-    s+=",";
-    s+=std::to_string(port);
-    s+=",";
-    s+=std::to_string(w);
-    s+=")";            
-    s+="\n";
+    std::memcpy(buf, &j, 1);
 
-    return s;
+    ip = htonl(ip);
+    std::memcpy(buf + 1, &ip, 4);
+
+    port = htons(port);
+    std::memcpy(buf + 5, &port, 2);
+
+    w = htonl(w);
+    std::memcpy(buf + 7, &w, 4);
 }
 
 int main(int argc, char *argv[]) {
@@ -145,7 +130,7 @@ int main(int argc, char *argv[]) {
 
     uint64_t connect_msgs[N];
     uint16_t port_no[N];
-    std::string ipvn[N];
+    uint32_t ipvn[N];
 
     for (int i=0; i<N; i++) {
         client_sockfd[i] = accept(sockfd, (struct sockaddr*) &their_addr[i], &sin_size);
@@ -157,14 +142,19 @@ int main(int argc, char *argv[]) {
         ipvn[i] = p.second;
         std::cout << "Client " << (char) ('A' + i) << ": " <<ipvn[i]<<" "<<port_no[i]<< "\n";
     }
-
+    char buf[N*11+1];
     for(int i=0;i<N;i++){
         std::string s = "";
+        size_t off =1;
+        uint8_t c =0;
         for(int j=0;j<N;j++){
             if(adj[i][j]<0) continue;
-            s = linkstate(ipvn[j],port_no[j],adj[i][j],j);
+            linkstate(buf+off,ipvn[j],port_no[j],adj[i][j],j);
+            off += 11;
+            c++;
         }
-        send(client_sockfd[i],s.c_str(),s.size(),0);
+        std::memcpy(buf, &c, 1);
+        send(client_sockfd[i], buf, off,0);
     }
 
 

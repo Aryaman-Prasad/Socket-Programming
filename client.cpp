@@ -20,6 +20,21 @@ uint64_t parse_int(string ip_addr, int port_no){
     return parse;
 }
 
+void parse_linkstate(char* buf){
+    uint8_t j;
+    uint32_t ip, w;
+    uint16_t port;
+
+    memcpy(&j, buf, 1);
+    memcpy(&ip, buf + 1, 4);
+    ip = ntohl(ip);
+    memcpy(&port, buf + 5, 2);
+    port = ntohs(port);
+    memcpy(&w, buf + 7, 4);
+    w = ntohl(w);
+    cout<<(char)('A'+j)<<" "<<ip<<" "<<port<<" "<<w<<endl;
+}
+
 int main(int argc,char* argv[]) {
     // taking inputs in Virtual Node
     string dst_ip=argv[1],vn_ip=argv[3];
@@ -81,7 +96,12 @@ int main(int argc,char* argv[]) {
         buf[status] = '\0';
         printf("%s", buf);
     }
+    
+    uint8_t n;
+    memcpy(&n,buf,1);
 
+    for(uint8_t i = 0;i < n; i++) parse_linkstate(buf + 1 + i * 11);
+    
 
     close(virtualnodefd);
 }
