@@ -60,12 +60,18 @@ int main(int argc, char *argv[]) {
                 adj[n].resize(N);
                 fillAdj(adj, v, n, N);
                 n++;
+                continue;
             }
             adj[n].resize(N);
             fillAdj(adj, v, n, N);
             n++;
         }
     }
+    
+    // Extra line added to adj matrix to make it N x N
+    adj[n].resize(N);
+    std::vector<int> dummy(n, 0);
+    fillAdj(adj, dummy, n, N);
 
     for (auto r : adj) {
         for (auto e : r) std::cout << e << " ";
