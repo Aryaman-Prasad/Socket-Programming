@@ -34,6 +34,12 @@ void fillAdj(std::vector<std::vector<int>> &adj, std::vector<int> &v, int n, int
     for (int i=n+1; i<N; i++) adj[n][i] = v[i-n-1];
 }
 
+void fullFillAdj(std::vector<std::vector<int>> &adj, int N) {
+    for (int i=0; i<N-1; i++) {
+        for (int j=i+1; j<N; j++) adj[j][i] = adj[i][j];
+    }
+}
+
 int main(int argc, char *argv[]) {
     if (argc < 2) {
         std::cout << "Usage: " << argv[0] << " <config-file>.txt\n";
@@ -72,6 +78,9 @@ int main(int argc, char *argv[]) {
     adj[n].resize(N);
     std::vector<int> dummy(n, 0);
     fillAdj(adj, dummy, n, N);
+
+    // We want to make adj filled fully (not just upper triangle)
+    fullFillAdj(adj, N);
 
     for (auto r : adj) {
         for (auto e : r) std::cout << e << " ";
