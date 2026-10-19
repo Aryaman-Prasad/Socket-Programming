@@ -29,11 +29,26 @@ int main(int argc,char* argv[]) {
     string msg = to_string(msg1);
 
     int virtualnodefd, status;
-    struct sockaddr_in server_addr;
+    struct sockaddr_in server_addr,udp_addr;
 
     virtualnodefd = socket(AF_INET, SOCK_STREAM, 0);
     if(virtualnodefd<0){
         perror("socket");
+        return 1;
+    }
+
+    int udpfd = socket(AF_INET,SOCK_DGRAM,0);
+    if(udpfd<0){
+        perror("socket");
+        return 1;
+    }
+    
+    udp_addr.sin_family = AF_INET;
+    udp_addr.sin_port = htons(src_udpport);
+    udp_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    if (bind(udpfd, (struct sockaddr*)&udp_addr,sizeof(udp_addr)) < 0) {
+        perror("UDP bind failed");
+        close(udpfd);
         return 1;
     }
 
@@ -52,7 +67,7 @@ int main(int argc,char* argv[]) {
         return 1;
     }
     
-    status = send(virtualnodefd, msg.c_str(), msg.size(), 0);
+    status = send(virtualnodefd, &msg1, sizeof(msg1), 0);
     if(status<0){
         perror("send_vn");
         close(virtualnodefd);
@@ -62,7 +77,11 @@ int main(int argc,char* argv[]) {
 
     char buf[1024];
     status = read(virtualnodefd,buf,1023);
-    printf("%s",buf);
+    if (status > 0) {
+        buf[status] = '\0';
+        printf("%s", buf);
+    }
+
 
     close(virtualnodefd);
 }

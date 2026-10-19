@@ -87,8 +87,6 @@ int main(int argc, char *argv[]) {
         std::cout << "\n";
     }
 
-
-
     // Accept N connections and their corresponding messages
     int sockfd, client_sockfd[N];
     struct sockaddr_in my_addr;
@@ -107,25 +105,63 @@ int main(int argc, char *argv[]) {
 
     sin_size = sizeof(struct sockaddr_in);
 
-    char connect_msgs[N][1024];
+    uint64_t connect_msgs[N];
+    uint16_t port_no[N];
+    std::string ipvn[N];
 
     for (int i=0; i<N; i++) {
         client_sockfd[i] = accept(sockfd, (struct sockaddr*) &their_addr[i], &sin_size);
 
         ssize_t valread;
-        valread = read(client_sockfd[i], connect_msgs[i], 1023);
+        valread = read(client_sockfd[i], &connect_msgs[i], sizeof(connect_msgs));
+        port_no[i]=(((0xFFFF)) & (uint64_t)connect_msgs[i]);
+        std::string s="";
+        connect_msgs[i]>>=16;
+        s=std::to_string(connect_msgs[i] & 0xFF)+s;
+        s="."+s;
+        connect_msgs[i]>>=8;
+        s=std::to_string(connect_msgs[i] & 0xFF)+s;
+        s="."+s;
+        connect_msgs[i]>>=8;
+        s=std::to_string(connect_msgs[i] & 0xFF)+s;
+        s="."+s;
+        connect_msgs[i]>>=8;
+        s=std::to_string(connect_msgs[i] & 0xFF)+s;
+        ipvn[i]=s;
 
-        std::cout << "Client " << (char) ('A' + i) << ": " << connect_msgs[i] << "\n";
+        std::cout << "Client " << (char) ('A' + i) << ": " <<ipvn[i]<<" "<<port_no[i]<< "\n";
+
+        s="";
+        
     }
+
+    for(int i=0;i<N;i++){
+        std::string s = "";
+        for(int j=0;j<N;j++){
+            s+="(";
+            s+=(char)('A'+j);
+            s+=",";
+            s+=(ipvn[j]);
+            s+=",";
+            s+=std::to_string(port_no[j]);
+            s+=",";
+            s+=std::to_string(adj[i][j]);
+            s+=")";            
+            s+="\n";
+        }
+        send(client_sockfd[i],s.c_str(),s.size(),0);
+    }
+
+
 
     std::cout << "All connections done!\n";
 
-    for (int i=0; i<N; i++) {
-        std::string msg = "Hey! You are ";
-        msg += 'A' + i;
-
-        send(client_sockfd[i], msg.c_str(), msg.size(), 0);
-    }
+    // for (int i=0; i<N; i++) {
+    //     std::string msg = "Hey! You are ";
+    //     msg += 'A' + i;
+    //     msg+="\n";
+    //     send(client_sockfd[i], msg.c_str(), msg.size(), 0);
+    // }
 
     std::cout << "Messages sent back!\n";
 
