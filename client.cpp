@@ -1,6 +1,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <vector>
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
@@ -8,6 +9,65 @@
 #include <unistd.h>
 
 using namespace std;
+
+string formatIp(uint32_t ip) {
+    string s = "";
+
+    for (int i=0; i<4; i++) {
+        s = to_string(ip & (0xFF)) + s;
+        ip >>= 8;
+        if (i < 4 - 1) s = '.' + s;
+    }
+
+    return s;
+}
+
+class ForwardingTable {
+    struct TableEntry {
+        char VN;
+        uint32_t ip_addr;
+        uint16_t port;
+        uint32_t distance;
+        char nextHop; 
+    };
+
+    std::vector<TableEntry> table;
+    std::vector<int> existingNodes;
+
+  public:
+    void clear() {
+        table.clear();
+        existingNodes.resize(26, 0);
+    }
+
+    void insertLSM(char* LSMrow) {
+        // 88-bit message, 8 (VN) + 32 (ip) + 16 (port) + 32 (distance)
+        TableEntry newEntry = {'\0', 0, 0, 0, '\0'};
+        newEntry.VN = LSMrow[0] + 'A';
+
+        uint32_t ip_net, distance_net;
+        uint16_t port_net;
+
+        memcpy(&ip_net, LSMrow + 1, sizeof(ip_net));
+        memcpy(&port_net, LSMrow + 5, sizeof(port_net));
+        memcpy(&distance_net, LSMrow + 7, sizeof(distance_net));
+
+        newEntry.ip_addr = ntohl(ip_net);
+        newEntry.port = ntohs(port_net);
+        newEntry.distance = ntohl(distance_net);
+
+        newEntry.nextHop = LSMrow[0] + 'A'; // Starting nextHop is the adjacent node itself
+
+        existingNodes[newEntry.VN - 'A'] = 1 + table.size();
+        table.push_back(newEntry);
+    }
+
+    void displayTable() {
+        for (auto row : table) {
+            std::cout << row.VN << " " << formatIp(row.ip_addr) << " " << row.port << " " << row.distance << " " << row.nextHop << "\n";
+        }
+    }
+};
 
 uint64_t parse_int(string ip_addr, int port_no){
     uint64_t parse = 0;
@@ -18,21 +78,6 @@ uint64_t parse_int(string ip_addr, int port_no){
     }
     parse=(parse<<16) | port_no;
     return parse;
-}
-
-void parse_linkstate(char* buf){
-    uint8_t j;
-    uint32_t ip, w;
-    uint16_t port;
-
-    memcpy(&j, buf, 1);
-    memcpy(&ip, buf + 1, 4);
-    ip = ntohl(ip);
-    memcpy(&port, buf + 5, 2);
-    port = ntohs(port);
-    memcpy(&w, buf + 7, 4);
-    w = ntohl(w);
-    cout<<(char)('A'+j)<<" "<<ip<<" "<<port<<" "<<w<<endl;
 }
 
 int main(int argc,char* argv[]) {
@@ -96,11 +141,19 @@ int main(int argc,char* argv[]) {
         buf[status] = '\0';
         printf("%s", buf);
     }
+
+    ForwardingTable forwardingTable; // MAIN FORWARDING TABLE OF THE NODE
+    forwardingTable.clear();
     
     uint8_t n;
     memcpy(&n,buf,1);
 
-    for(uint8_t i = 0;i < n; i++) parse_linkstate(buf + 1 + i * 11);
+    for(uint8_t i = 0;i < n; i++) {
+        // parse_linkstate(buf + 1 + i * 11);
+        forwardingTable.insertLSM(buf + 1 + i * 11);
+    }
+
+    forwardingTable.displayTable();
     
 
     close(virtualnodefd);
