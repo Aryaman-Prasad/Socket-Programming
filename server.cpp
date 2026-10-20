@@ -117,11 +117,11 @@ bool loadConfig(std::string path,std::vector<std::vector<int>>& Adj) {
 
 bool sendLinkState(int fd,int node,const std::vector<std::vector<int>>& adj,const uint32_t ipvn[],const uint16_t port_no[]) {
     int N = adj.size();
-    char buf[2 + 26 * 11];
+    char buf[3 + 26 * 11];
 
-    buf[0] = static_cast<char>(N);
+    buf[1] = static_cast<char>(N);
 
-    size_t off = 2;
+    size_t off = 3;
     uint8_t count = 0;
 
     for (int j = 0; j < N; j++) {
@@ -131,7 +131,7 @@ bool sendLinkState(int fd,int node,const std::vector<std::vector<int>>& adj,cons
         count++;
     }
 
-    buf[1] = static_cast<char>(count);
+    buf[2] = static_cast<char>(count);
     ssize_t sent = send(fd, buf, off, 0);
     if (sent < 0) {
         perror("send LINK-STATE");
@@ -257,7 +257,6 @@ int main(int argc, char *argv[]) {
             perror("stat");
             continue;
         }
-
         if (currentStat.st_mtime == lastStat.st_mtime) continue;
         std::vector<std::vector<int>> newAdj;
         if (!loadConfig(configFilePath, newAdj))continue;
