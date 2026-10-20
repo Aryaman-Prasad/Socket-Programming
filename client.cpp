@@ -132,6 +132,20 @@ void parse_linkstate(char* buf){
     w = ntohl(w);
     std::cout<<(char)('A'+j)<<" "<<formatIp(ip)<<" "<<port<<" "<<w<<endl;
 }
+
+void linkstate(char* buf,uint32_t ip,uint16_t port,uint32_t w,uint8_t j){
+
+    std::memcpy(buf, &j, 1);
+
+    ip = htonl(ip);
+    std::memcpy(buf + 1, &ip, 4);
+
+    port = htons(port);
+    std::memcpy(buf + 5, &port, 2);
+
+    w = htonl(w);
+    std::memcpy(buf + 7, &w, 4);
+}
 uint64_t parse_int(string ip_addr, int port_no){
     uint64_t parse = 0;
     stringstream ss(ip_addr);
@@ -295,6 +309,7 @@ int main(int argc,char* argv[]) {
 
         A[vn1] = true;
         visited++;
+        sqns[vn1]=sqn;
         for(int i = 0;i < fn;i++){
             
             if (forwardingTable.table[i].distance == 0) continue;
@@ -352,22 +367,48 @@ int main(int argc,char* argv[]) {
         pfds[1].events = POLLIN;
         pfds[1].revents = 0;
 
-        int ready = poll(pfds, 2, -1);
+        int ready = poll(pfds, 2, 15000);
+        if (ready == 0) {
+            cout<<"sent "<<endl;
+            int self = VN - 'A';
 
-        if (ready < 0) {
-            perror("poll");
-            break;
+            char udpBuf[1024];
+            uint8_t count = 0;
+
+            for (int j = 0; j < N; j++) {
+                if (Adj[self][j] == INT32_MAX) continue;
+
+                linkstate(udpBuf + 3 + count * 11,ips[j], ports[j],Adj[self][j], (uint8_t)j);
+                count++;
+            }
+
+            udpBuf[0] = (char)seqno++;
+            udpBuf[1] = (char)self;
+            udpBuf[2] = (char)count;
+
+            for (int j = 0; j < N; j++) {
+                if (j == self || Adj[self][j] == INT32_MAX) continue;
+
+                struct sockaddr_in dest_addr{};
+                dest_addr.sin_family = AF_INET;
+                dest_addr.sin_port = htons(ports[j]);
+                dest_addr.sin_addr.s_addr = htonl(ips[j]);
+
+                sendto(udpfd, udpBuf, 3 + count * 11, 0,(struct sockaddr*)&dest_addr, sizeof(dest_addr));
+            }
+            continue;
         }
 
         bool topologyChanged = false;
 
         if (pfds[0].revents & POLLIN) {
+            cout<<"Topology changed from server"<<endl;
             status = read(virtualnodefd, buf, 1023);
 
             uint8_t count;
             memcpy(&N, buf+1, 1);
             memcpy(&count, buf + 2, 1);
-            cout<<"YES"<<endl;
+
             int self = VN - 'A';
 
             for (int j = 0; j < N; j++) {
@@ -431,9 +472,8 @@ int main(int argc,char* argv[]) {
             uint8_t vn1 = (uint8_t)buf1[1];
             uint8_t no_no = (uint8_t)buf1[2];
             uint8_t sqn = (uint8_t)buf1[0];
-
             if (A[vn1] && sqn <= sqns[vn1])continue;
-
+            cout<<"Received Update from "<<(char)('A'+vn1)<<endl;
             A[vn1] = true;
             sqns[vn1] = sqn;
 
@@ -469,11 +509,9 @@ int main(int argc,char* argv[]) {
             }
 
             for (int j = 0; j < N; j++) {
-                if (j == VN - 'A' ||Adj[VN - 'A'][j] == INT32_MAX)
-                    continue;
+                if (j == VN - 'A' ||Adj[VN - 'A'][j] == INT32_MAX)continue;
 
-                if (ports[j] == ntohs(sender.sin_port) &&ips[j] == ntohl(sender.sin_addr.s_addr))
-                    continue;
+                if (ports[j] == ntohs(sender.sin_port) &&ips[j] == ntohl(sender.sin_addr.s_addr))continue;
 
                 struct sockaddr_in dest_addr{};
                 dest_addr.sin_family = AF_INET;
