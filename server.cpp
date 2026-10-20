@@ -142,10 +142,12 @@ int main(int argc, char *argv[]) {
         ipvn[i] = p.second;
         std::cout << "Client " << (char) ('A' + i) << ": " <<ipvn[i]<<" "<<port_no[i]<< "\n";
     }
-    char buf[N*11+1];
+    char buf[N*11+2];
+    
     for(int i=0;i<N;i++){
+        std::memcpy(buf,&N,1);
         std::string s = "";
-        size_t off =1;
+        size_t off =2;
         uint8_t c =0;
         for(int j=0;j<N;j++){
             if(adj[i][j]<0) continue;
@@ -153,7 +155,7 @@ int main(int argc, char *argv[]) {
             off += 11;
             c++;
         }
-        std::memcpy(buf, &c, 1);
+        std::memcpy(buf+1, &c, 1);
         send(client_sockfd[i], buf, off,0);
     }
 
