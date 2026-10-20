@@ -5,7 +5,8 @@
 #include <vector>
 #include <cstring>
 #include <arpa/inet.h>
-
+#include <sys/stat.h>
+#include <ctime>
 #define PORT 5000
 #define BACKLOG 10
 
@@ -14,17 +15,19 @@ std::vector<int> parseLine(std::string& line) {
     std::vector<int> v;
 
     for (auto c : line) {
-        if (c != ' ') num += c;
-        else {
+        if (c == '#') break;  
+        if (c != ' ' && c != '\t') {
+            num += c;
+        } else {
             if (num.length() > 0) {
                 v.push_back(atoi(num.c_str()));
                 num = "";
             }
         }
     }
+
     if (num.length() > 0) {
         v.push_back(atoi(num.c_str()));
-        num = "";
     }
 
     return v;
@@ -63,6 +66,80 @@ void linkstate(char* buf,uint32_t ip,uint16_t port,uint32_t w,uint8_t j){
     std::memcpy(buf + 7, &w, 4);
 }
 
+bool loadConfig(std::string path,std::vector<std::vector<int>>& Adj) {
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        perror("config file");
+        return false;
+    }
+
+    std::vector<std::vector<int>> rows;
+    std::string line;
+
+    while (std::getline(file, line)) {
+        std::vector<int> v = parseLine(line);
+        if (!v.empty())rows.push_back(v);
+    }
+    if (rows.empty()) return false;
+
+    int newN = rows[0].size() + 1;
+    if (newN < 2 || newN > 26 ||
+        rows.size() != static_cast<size_t>(newN - 1)) {
+        std::cerr << "Invalid configuration\n";
+        return false;
+    }
+
+    for (int i = 0; i < newN - 1; i++) {
+        if (rows[i].size() !=
+            static_cast<size_t>(newN - i - 1)) {
+            std::cerr << "Invalid row length for node " << char('A' + i) << '\n';
+            return false;
+        }
+    }
+    Adj.assign(newN, std::vector<int>(newN, -1));
+    for (int i = 0; i < newN; i++) {
+        Adj[i][i] = 0;
+    }
+    for (int i = 0; i < newN - 1; i++) {
+        for (int j = i + 1; j < newN; j++) {
+            int cost = rows[i][j - i - 1];
+            if (cost == 0 || cost < -1) {
+                std::cerr << "Invalid link cost\n";
+                return false;
+            }
+            Adj[i][j] = cost;
+            Adj[j][i] = cost;
+        }
+    }
+
+    return true;
+}
+
+bool sendLinkState(int fd,int node,const std::vector<std::vector<int>>& adj,const uint32_t ipvn[],const uint16_t port_no[]) {
+    int N = adj.size();
+    char buf[2 + 26 * 11];
+
+    buf[0] = static_cast<char>(N);
+
+    size_t off = 2;
+    uint8_t count = 0;
+
+    for (int j = 0; j < N; j++) {
+        if (adj[node][j] < 0) continue;
+        linkstate(buf + off,ipvn[j],port_no[j],adj[node][j],static_cast<uint8_t>(j));
+        off += 11;
+        count++;
+    }
+
+    buf[1] = static_cast<char>(count);
+    ssize_t sent = send(fd, buf, off, 0);
+    if (sent < 0) {
+        perror("send LINK-STATE");
+        return false;
+    }
+    return true;
+}
+
 int main(int argc, char *argv[]) {
     if (argc < 2) {
         std::cout << "Usage: " << argv[0] << " <config-file>.txt\n";
@@ -83,6 +160,7 @@ int main(int argc, char *argv[]) {
     while (std::getline(configFile, line)) {
         if (line.length() > 1 && line[0] != '#') {
             std::vector<int> v = parseLine(line);
+            if(v.empty())continue;
             if (n == 0) {
                 N = v.size() + 1;
                 adj.resize(N);
@@ -90,6 +168,10 @@ int main(int argc, char *argv[]) {
                 fillAdj(adj, v, n, N);
                 n++;
                 continue;
+            }
+            if (v.size() != N - n - 1) {
+                std::cerr << "Invalid row length for node " << char('A' + n) << std::endl;
+                return 1;
             }
             adj[n].resize(N);
             fillAdj(adj, v, n, N);
@@ -105,10 +187,7 @@ int main(int argc, char *argv[]) {
     // We want to make adj filled fully (not just upper triangle)
     fullFillAdj(adj, N);
 
-    for (auto r : adj) {
-        for (auto e : r) std::cout << e << " ";
-        std::cout << "\n";
-    }
+
 
     // Accept N connections and their corresponding messages
     int sockfd, client_sockfd[N];
@@ -117,14 +196,26 @@ int main(int argc, char *argv[]) {
     socklen_t sin_size;
 
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+        perror("socket");
+        return 1;
+    }
 
     my_addr.sin_family = AF_INET;
     my_addr.sin_port = htons(PORT);
     my_addr.sin_addr.s_addr = INADDR_ANY;
     memset(&(my_addr.sin_zero), '\0', 8);
 
-    bind(sockfd, (struct sockaddr*) &my_addr, sizeof(my_addr));
-    listen(sockfd, BACKLOG);
+    if (bind(sockfd, (struct sockaddr*) &my_addr, sizeof(my_addr)) < 0) {
+        perror("bind");
+        close(sockfd);
+        return 1;
+    }
+    if (listen(sockfd, BACKLOG) < 0) {
+        perror("listen");
+        close(sockfd);
+        return 1;
+    }
 
     sin_size = sizeof(struct sockaddr_in);
 
@@ -134,44 +225,55 @@ int main(int argc, char *argv[]) {
 
     for (int i=0; i<N; i++) {
         client_sockfd[i] = accept(sockfd, (struct sockaddr*) &their_addr[i], &sin_size);
-
+        if (client_sockfd[i] < 0) {
+            perror("accept");
+            return 1;
+        }
         ssize_t valread;
-        valread = read(client_sockfd[i], &connect_msgs[i], sizeof(connect_msgs));
+        valread = read(client_sockfd[i], &connect_msgs[i], sizeof(connect_msgs[i]));
         auto p = parse_ip_port(connect_msgs[i]);
         port_no[i] = p.first;
         ipvn[i] = p.second;
         std::cout << "Client " << (char) ('A' + i) << ": " <<ipvn[i]<<" "<<port_no[i]<< "\n";
     }
-    char buf[N*11+2];
     
     for(int i=0;i<N;i++){
-        std::memcpy(buf,&N,1);
-        std::string s = "";
-        size_t off =2;
-        uint8_t c =0;
-        for(int j=0;j<N;j++){
-            if(adj[i][j]<0) continue;
-            linkstate(buf+off,ipvn[j],port_no[j],adj[i][j],j);
-            off += 11;
-            c++;
+        if (!sendLinkState(client_sockfd[i], i, adj, ipvn, port_no)) {
+            return 1;
         }
-        std::memcpy(buf+1, &c, 1);
-        send(client_sockfd[i], buf, off,0);
     }
 
+    struct stat lastStat{};
 
+    if (stat(configFilePath.c_str(), &lastStat) < 0) {
+        perror("stat");
+        return 1;
+    }
 
-    std::cout << "All connections done!\n";
+    while (true) {
+        sleep(1);
+        struct stat currentStat{};
+        if (stat(configFilePath.c_str(), &currentStat) < 0) {
+            perror("stat");
+            continue;
+        }
 
-    // for (int i=0; i<N; i++) {
-    //     std::string msg = "Hey! You are ";
-    //     msg += 'A' + i;
-    //     msg+="\n";
-    //     send(client_sockfd[i], msg.c_str(), msg.size(), 0);
-    // }
-
-    std::cout << "Messages sent back!\n";
-
+        if (currentStat.st_mtime == lastStat.st_mtime) continue;
+        std::vector<std::vector<int>> newAdj;
+        if (!loadConfig(configFilePath, newAdj))continue;
+        if (newAdj.size() != static_cast<size_t>(N)) continue;
+        bool f = true;
+        for (int i = 0; i < N; i++) {
+            if (!sendLinkState(client_sockfd[i], i, newAdj, ipvn, port_no)) {
+                f = false;
+                break;
+            }
+        }
+        if (f) {
+            adj = std::move(newAdj);
+            lastStat = currentStat;
+        }
+    }
     for (int i=0; i<N; i++) close(client_sockfd[i]);
     close(sockfd);
 }
