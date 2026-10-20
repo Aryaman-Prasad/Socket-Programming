@@ -1,13 +1,17 @@
-GCC=g++
+GCC=gcc
+GXX=g++
 CFLAGS=
+CXXFLAGS=
 
 BIN=server client
-SRCS=server.cpp client.cpp
 
 all: $(BIN)
 
-%: %.c
+server: server.c
 	$(GCC) $(CFLAGS) -o $@ $<
+
+client: client.cpp
+	$(GXX) $(CXXFLAGS) -o $@ $<
 
 clean:
 	rm -f $(BIN)
