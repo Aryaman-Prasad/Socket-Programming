@@ -363,11 +363,17 @@ int main(int argc,char* argv[]) {
         pfds[0].events = POLLIN;
         pfds[0].revents = 0;
 
+
         pfds[1].fd = udpfd;
         pfds[1].events = POLLIN;
         pfds[1].revents = 0;
 
         int ready = poll(pfds, 2, 15000);
+        if (ready < 0) {
+            if (errno == EINTR) continue;
+            perror("poll");
+            break;
+        }
         if (ready == 0) {
             cout<<"sent "<<endl;
             int self = VN - 'A';
@@ -404,7 +410,13 @@ int main(int argc,char* argv[]) {
         if (pfds[0].revents & POLLIN) {
             cout<<"Topology changed from server"<<endl;
             status = read(virtualnodefd, buf, 1023);
-
+            
+            if (status <= 0) {
+                cerr << "Oracle Node disconnected" << endl;
+                close(virtualnodefd);
+                close(udpfd);
+                return 1;
+            }
             uint8_t count;
             memcpy(&N, buf+1, 1);
             memcpy(&count, buf + 2, 1);
@@ -472,9 +484,8 @@ int main(int argc,char* argv[]) {
             uint8_t vn1 = (uint8_t)buf1[1];
             uint8_t no_no = (uint8_t)buf1[2];
             uint8_t sqn = (uint8_t)buf1[0];
-            if (A[vn1] && sqn <= sqns[vn1])continue;
+            if (sqn <= sqns[vn1])continue;
             cout<<"Received Update from "<<(char)('A'+vn1)<<endl;
-            A[vn1] = true;
             sqns[vn1] = sqn;
 
             for (int j = 0; j < N; j++) {
