@@ -150,7 +150,9 @@ int sendLinkState(int fd, int node, int Adj[MAX_N][MAX_N], int N, const uint32_t
 
     return 1;
 }
-
+void print_ipformat(uint32_t ip){
+    printf("%u.%u.%u.%u", (ip >> 24) & 0xFF, (ip >> 16) & 0xFF, (ip >> 8) & 0xFF, ip & 0xFF);
+}
 int main(int argc, char *argv[]) {
     if (argc < 2) {
         printf("Usage: %s <config-file>.txt\n", argv[0]);
@@ -209,7 +211,9 @@ int main(int argc, char *argv[]) {
         }
 
         parse_ip_port(connect_msg, &port_no[i], &ipvn[i]);
-        printf("Client %c: %u %u\n", 'A' + i, (unsigned int)ipvn[i], (unsigned int)port_no[i]);
+        printf("Client %c: ", 'A' + i);
+        print_ipformat(ipvn[i]);
+        printf(" %u\n", (unsigned int)port_no[i]);
     }
 
     for (int i = 0; i < N; i++) {
@@ -225,7 +229,6 @@ int main(int argc, char *argv[]) {
     while (1) {
         sleep(1);
         struct stat currentStat;
-
         if (stat(configFilePath, &currentStat) < 0) {
             perror("stat");
             continue;
