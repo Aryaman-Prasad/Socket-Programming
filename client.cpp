@@ -273,7 +273,7 @@ int main(int argc,char* argv[]) {
     buf[1]= (char) vn;
     buf[0] = (char) seqno;
     seqno++;
-    vector<uint16_t> sqns(N);
+    vector<uint8_t> sqns(N);
     for(int i = 0;i < fn;i++){
         if (forwardingTable.table[i].distance == 0) continue;
         struct sockaddr_in dest_addr;
@@ -303,7 +303,7 @@ int main(int argc,char* argv[]) {
         ssize_t n = recvfrom(udpfd,buf1,sizeof(buf1),0,(struct sockaddr*)&sender,&sender_len);
         uint8_t vn1 = static_cast<uint8_t>(buf1[1]);
         uint8_t no_no = static_cast<uint8_t>(buf1[2]);       
-        uint16_t sqn = buf1[0];
+        uint8_t sqn = buf1[0];
         
         if (A[vn1] || sqn<sqns[vn1]) continue;
 
@@ -483,12 +483,17 @@ int main(int argc,char* argv[]) {
 
             uint8_t vn1 = (uint8_t)buf1[1];
             uint8_t no_no = (uint8_t)buf1[2];
-            uint16_t sqn = (uint8_t)buf1[0];
+            uint8_t sqn = (uint8_t)buf1[0];
             if (sqn <= sqns[vn1])continue;
-            
-            bool changed = false;
-            vector<int32_t> newRow(N, INT32_MAX);
-            newRow[vn1] = 0;
+            cout<<"Received Update from "<<(char)('A'+vn1)<<endl;
+            sqns[vn1] = sqn;
+
+            for (int j = 0; j < N; j++) {
+                if (j != vn1) {
+                    Adj[vn1][j] = INT32_MAX;
+                    Adj[j][vn1] = INT32_MAX;
+                }
+            }
 
             for (int i = 0; i < no_no; i++) {
                 char* entry = buf1 + 3 + i * 11;
@@ -504,42 +509,30 @@ int main(int argc,char* argv[]) {
 
                 if (id >= N) continue;
 
-                ip = ntohl(ip);
-                port = ntohs(port);
+                ips[id] = ntohl(ip);
+                ports[id] = ntohs(port);
                 cost = ntohl(cost);
 
-                ips[id] = ip;
-                ports[id] = port;
-
                 if (id != vn1) {
-                    newRow[id] = (int32_t)cost;
+                    Adj[vn1][id] = cost;
+                    Adj[id][vn1] = cost;
                 }
             }
 
             for (int j = 0; j < N; j++) {
-                if (j != vn1 && Adj[vn1][j] != newRow[j]) {
-                    changed = true;
-                    break;
-                }
-            }
-            if (changed) {
-                for (int j = 0; j < N; j++) {
-                    if (j == vn1) continue;
+                if (j == VN - 'A' ||Adj[VN - 'A'][j] == INT32_MAX)continue;
 
-                    Adj[vn1][j] = newRow[j];
-                    Adj[j][vn1] = newRow[j];
-                }
+                if (ports[j] == ntohs(sender.sin_port) &&ips[j] == ntohl(sender.sin_addr.s_addr))continue;
 
-                topologyChanged = true;
+                struct sockaddr_in dest_addr{};
+                dest_addr.sin_family = AF_INET;
+                dest_addr.sin_port = htons(ports[j]);
+                dest_addr.sin_addr.s_addr = htonl(ips[j]);
+
+                sendto(udpfd, buf1, received, 0,(struct sockaddr*)&dest_addr, sizeof(dest_addr));
             }
 
-            if (changed) {
-                cout << "Topology changed by " << (char)('A' + vn1) << endl;
-            } else {
-                cout << "No topology change from " << (char)('A' + vn1) << endl;
-                forwardingTable.displayTable();
-            }
-
+            topologyChanged = true;
         }
 
         if (topologyChanged) {
